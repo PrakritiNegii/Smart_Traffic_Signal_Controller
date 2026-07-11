@@ -93,7 +93,14 @@ function persistHistory(entry) {
 function toast(message, type = "info") {
   const el = document.createElement("div");
   el.className = `toast toast--${type}`;
-  el.innerHTML = `<i class="fa-solid fa-${type === "success" ? "check-circle" : type === "error" ? "circle-xmark" : "info-circle"}"></i><span>${message}</span>`;
+
+  const icon = document.createElement("i");
+  icon.className = `fa-solid fa-${type === "success" ? "check-circle" : type === "error" ? "circle-xmark" : "info-circle"}`;
+
+  const text = document.createElement("span");
+  text.textContent = message;
+
+  el.append(icon, text);
   $("#toast-container").appendChild(el);
   setTimeout(() => {
     el.style.opacity = "0";
@@ -115,17 +122,24 @@ function confirmDialog(message) {
   return new Promise((resolve) => {
     const modal = $("#confirm-modal");
     $("#confirm-message").textContent = message;
-    modal.showModal();
 
-    const cleanup = (result) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
       modal.close();
-      $("#confirm-ok").onclick = null;
-      $("#confirm-cancel").onclick = null;
+      modal.oncancel = null;
       resolve(result);
     };
 
-    $("#confirm-ok").onclick = () => cleanup(true);
-    $("#confirm-cancel").onclick = () => cleanup(false);
+    modal.oncancel = (e) => {
+      e.preventDefault();
+      finish(false);
+    };
+
+    modal.showModal();
+    $("#confirm-ok").onclick = () => finish(true);
+    $("#confirm-cancel").onclick = () => finish(false);
   });
 }
 
@@ -146,7 +160,7 @@ function initMermaid() {
   const dark = document.documentElement.getAttribute("data-theme") === "dark";
   window.mermaid.initialize({
     startOnLoad: false,
-    securityLevel: "loose",
+    securityLevel: "strict",
     theme: "base",
     themeVariables: dark
       ? {
@@ -273,7 +287,8 @@ function switchView(viewId) {
   $$(".nav-item, .mobile-nav__item").forEach((n) => {
     const isActive = n.dataset.view === viewId;
     n.classList.toggle("active", isActive);
-    n.setAttribute("aria-current", isActive ? "page" : null);
+    if (isActive) n.setAttribute("aria-current", "page");
+    else n.removeAttribute("aria-current");
   });
 
   if (viewId === "history") {
@@ -663,7 +678,12 @@ function setupUploadZones() {
 
 function showPreview(zone, file) {
   const preview = zone.querySelector(".upload-zone__preview");
-  preview.src = URL.createObjectURL(file);
+  if (preview.dataset.objectUrl) {
+    URL.revokeObjectURL(preview.dataset.objectUrl);
+  }
+  const url = URL.createObjectURL(file);
+  preview.dataset.objectUrl = url;
+  preview.src = url;
   preview.hidden = false;
   zone.classList.add("has-file");
 }
@@ -723,6 +743,10 @@ function bindEvents() {
       zone.classList.remove("has-file");
       zone.querySelector("input").value = "";
       const preview = zone.querySelector(".upload-zone__preview");
+      if (preview.dataset.objectUrl) {
+        URL.revokeObjectURL(preview.dataset.objectUrl);
+        delete preview.dataset.objectUrl;
+      }
       preview.hidden = true;
       preview.src = "";
     });

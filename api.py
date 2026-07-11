@@ -3,7 +3,7 @@
 import os
 import tempfile
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Tuple
 
 from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.utils import secure_filename
@@ -12,7 +12,7 @@ from adaptive_timer import AdaptiveSignalTimer
 from junction import Junction
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
-app.secret_key = os.environ.get("SECRET_KEY", "traffic-signal-dev-key")
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
 
 LANES = ["N", "S", "E", "W"]
 LANE_FILES = ["north", "south", "east", "west"]
@@ -22,9 +22,15 @@ ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 @lru_cache(maxsize=1)
-def get_detector(threshold: float = 0.4):
+def _get_detector_cached():
     from detector import TrafficDetector
-    return TrafficDetector(model_path=MODEL_PATH, threshold=threshold)
+    return TrafficDetector(model_path=MODEL_PATH, threshold=0.4)
+
+
+def get_detector(threshold: float = 0.4):
+    detector = _get_detector_cached()
+    detector.threshold = threshold
+    return detector
 
 
 def get_timer(min_green: int = 15, max_green: int = 60) -> AdaptiveSignalTimer:
@@ -77,14 +83,26 @@ def _decide(lane_counts: dict, detections_by_lane: Optional[dict], settings: dic
     }
 
 
-def _parse_settings() -> dict:
-    data = request.get_json(silent=True) or {}
-    settings = data.get("settings") or request.form.to_dict() or {}
-    return {
-        "min_green": int(settings.get("min_green", 15)),
-        "max_green": int(settings.get("max_green", 60)),
-        "threshold": float(settings.get("threshold", 0.4)),
-    }
+def _parse_settings(raw: Optional[dict] = None) -> Tuple[Optional[dict], Optional[str]]:
+    data = raw if raw is not None else (request.get_json(silent=True) or {})
+    settings = data.get("settings") if isinstance(data, dict) and "settings" in data else data
+    if not settings:
+        settings = request.form.to_dict() or {}
+
+    try:
+        return {
+            "min_green": int(settings.get("min_green", 15)),
+            "max_green": int(settings.get("max_green", 60)),
+            "threshold": float(settings.get("threshold", 0.4)),
+        }, None
+    except (TypeError, ValueError):
+        return None, "Invalid settings values"
+
+
+def _error_response(exc: Exception, context: str):
+    app.logger.exception(context)
+    message = str(exc) if app.debug else "Internal server error"
+    return jsonify({"error": message}), 500
 
 
 @app.route("/")
@@ -99,7 +117,10 @@ def health():
 
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
-    settings = _parse_settings()
+    settings, err = _parse_settings()
+    if err:
+        return jsonify({"error": err}), 400
+
     threshold = settings["threshold"]
 
     missing = [name for name in LANE_FILES if name not in request.files]
@@ -108,7 +129,6 @@ def analyze():
 
     lane_counts = {}
     detections_by_lane = {}
-    previews = {}
 
     try:
         detector = get_detector(threshold)
@@ -143,7 +163,7 @@ def analyze():
         return jsonify(result)
 
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return _error_response(exc, "Analyze failed")
 
 
 @app.route("/api/next-cycle", methods=["POST"])
@@ -154,23 +174,21 @@ def next_cycle():
     if not lane_counts:
         return jsonify({"error": "No lane data. Upload images first."}), 400
 
-    settings = data.get("settings") or {}
-    parsed = {
-        "min_green": int(settings.get("min_green", 15)),
-        "max_green": int(settings.get("max_green", 60)),
-    }
+    settings, err = _parse_settings(data)
+    if err:
+        return jsonify({"error": err}), 400
 
     try:
-        result = _decide(lane_counts, None, parsed)
+        result = _decide(lane_counts, None, settings)
         return jsonify(result)
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return _error_response(exc, "Next cycle failed")
 
 
 @app.route("/api/reset", methods=["POST"])
 def reset():
     session.clear()
-    get_detector.cache_clear()
+    _get_detector_cached.cache_clear()
     return jsonify({"status": "reset"})
 
 
