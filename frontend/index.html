@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Adaptive traffic signal control dashboard with YOLO vehicle detection">
+  <title>SignalFlow — Traffic Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <script>
+    (function () {
+      var saved = localStorage.getItem("signalflow_theme");
+      var dark = saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      if (dark) document.documentElement.setAttribute("data-theme", "dark");
+    })();
+  </script>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <div class="app" id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+      <div class="sidebar__brand">
+        <div class="sidebar__logo" aria-hidden="true">
+          <i class="fa-solid fa-traffic-light"></i>
+        </div>
+        <div>
+          <span class="sidebar__title">SignalFlow</span>
+          <span class="sidebar__subtitle">Junction Control</span>
+        </div>
+      </div>
+
+      <nav class="sidebar__nav">
+        <button class="nav-item active" data-view="dashboard" aria-current="page">
+          <i class="fa-solid fa-gauge-high"></i>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-view="junction">
+          <i class="fa-solid fa-road"></i>
+          <span>Junction</span>
+        </button>
+        <button class="nav-item" data-view="detection">
+          <i class="fa-solid fa-camera"></i>
+          <span>Detection</span>
+        </button>
+        <button class="nav-item" data-view="history">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span>History</span>
+        </button>
+        <button class="nav-item" data-view="architecture">
+          <i class="fa-solid fa-diagram-project"></i>
+          <span>Architecture</span>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <div class="sidebar__footer">
+        <div class="status-pill" id="system-status">
+          <span class="status-pill__dot"></span>
+          <span>System Ready</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar__spacer"></div>
+        <div class="topbar__actions">
+          <button class="icon-btn theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <i class="fa-solid fa-moon"></i>
+          </button>
+          <button class="btn btn--ghost btn--sm" id="reset-btn" title="Reset junction state">
+            <i class="fa-solid fa-rotate-left"></i>
+            Reset
+          </button>
+          <div class="topbar__meta">
+            <button type="button" class="topbar__meta-btn" id="topbar-architecture" data-view="architecture">
+              <i class="fa-solid fa-diagram-project"></i>
+              <span>Architecture</span>
+            </button>
+            <a
+              href="https://github.com/PrakritiNegii/Smart_Traffic_Signal_Controller"
+              class="topbar__meta-link"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="View source on GitHub"
+            >
+              <i class="fa-brands fa-github"></i>
+              <span>GitHub</span>
+            </a>
+            <a
+              href="https://www.linkedin.com/in/prakriti-negi-39164b28a/"
+              class="topbar__meta-link"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Prakriti Negi on LinkedIn"
+            >
+              <i class="fa-brands fa-linkedin"></i>
+              <span>Prakriti Negi</span>
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <main class="content" id="main-content">
+        <!-- Dashboard -->
+        <section class="view active" id="view-dashboard" aria-labelledby="dashboard-heading">
+          <div class="page-header">
+            <div>
+              <h1 id="dashboard-heading">Dashboard</h1>
+              <p class="page-header__desc">Real-time junction overview and signal metrics</p>
+            </div>
+            <div class="page-header__actions">
+              <button class="btn btn--primary" id="quick-analyze-btn">
+                <i class="fa-solid fa-upload"></i>
+                Upload & Analyze
+              </button>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card">
+              <div class="stat-card__icon stat-card__icon--blue">
+                <i class="fa-solid fa-car"></i>
+              </div>
+              <div>
+                <p class="stat-card__label">Total Vehicles</p>
+                <p class="stat-card__value" id="stat-total">—</p>
+              </div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-card__icon stat-card__icon--teal">
+                <i class="fa-solid fa-circle-dot"></i>
+              </div>
+              <div>
+                <p class="stat-card__label">Active Phase</p>
+                <p class="stat-card__value" id="stat-phase">—</p>
+              </div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-card__icon stat-card__icon--green">
+                <i class="fa-solid fa-stopwatch"></i>
+              </div>
+              <div>
+                <p class="stat-card__label">Green Time</p>
+                <p class="stat-card__value" id="stat-green">—</p>
+              </div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-card__icon stat-card__icon--amber">
+                <i class="fa-solid fa-arrows-rotate"></i>
+              </div>
+              <div>
+                <p class="stat-card__label">Cycles Run</p>
+                <p class="stat-card__value" id="stat-cycles">0</p>
+              </div>
+            </article>
+          </div>
+
+          <div class="grid-2">
+            <article class="card">
+              <div class="card__header">
+                <h2>Lane Distribution</h2>
+              </div>
+              <div class="card__body">
+                <div class="lane-bars" id="lane-bars">
+                  <div class="empty-state empty-state--sm">
+                    <i class="fa-solid fa-chart-simple"></i>
+                    <p>Upload junction images to see lane data</p>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card__header">
+                <h2>Recent Activity</h2>
+              </div>
+              <div class="card__body">
+                <ul class="activity-list" id="activity-list">
+                  <li class="empty-state empty-state--sm">
+                    <i class="fa-solid fa-list"></i>
+                    <p>No cycles recorded yet</p>
+                  </li>
+                </ul>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Junction -->
+        <section class="view" id="view-junction" aria-labelledby="junction-heading" hidden>
+          <div class="page-header">
+            <div>
+              <h1 id="junction-heading">Junction Control</h1>
+              <p class="page-header__desc">Live signal phases with adaptive timing</p>
+            </div>
+            <div class="page-header__actions">
+              <button class="btn btn--secondary" id="manual-cycle-btn" disabled>
+                <i class="fa-solid fa-forward-step"></i>
+                Next Cycle
+              </button>
+              <button class="btn btn--primary" id="auto-cycle-btn" disabled>
+                <i class="fa-solid fa-play"></i>
+                Auto Cycle
+              </button>
+            </div>
+          </div>
+
+          <div class="grid-junction">
+            <article class="card card--junction">
+              <div class="card__header">
+                <h2>Intersection View</h2>
+                <span class="badge" id="cycle-badge">Idle</span>
+              </div>
+              <div class="card__body">
+                <div class="junction-map" id="junction-map" role="img" aria-label="Four-way intersection traffic lights">
+                  <!-- North -->
+                  <div class="signal signal--north" data-lane="N" data-phase="P1">
+                    <span class="signal__label">North</span>
+                    <div class="signal__lights">
+                      <span class="light light--red active"></span>
+                      <span class="light light--yellow"></span>
+                      <span class="light light--green"></span>
+                    </div>
+                    <span class="signal__count" data-count="N">0</span>
+                  </div>
+                  <!-- West -->
+                  <div class="signal signal--west" data-lane="W" data-phase="P4">
+                    <span class="signal__label">West</span>
+                    <div class="signal__lights">
+                      <span class="light light--red active"></span>
+                      <span class="light light--yellow"></span>
+                      <span class="light light--green"></span>
+                    </div>
+                    <span class="signal__count" data-count="W">0</span>
+                  </div>
+                  <!-- Center -->
+                  <div class="junction-core">
+                    <div class="junction-core__ring">
+                      <span class="junction-core__phase" id="core-phase">—</span>
+                      <span class="junction-core__timer" id="core-timer">—</span>
+                    </div>
+                  </div>
+                  <!-- East -->
+                  <div class="signal signal--east" data-lane="E" data-phase="P3">
+                    <span class="signal__label">East</span>
+                    <div class="signal__lights">
+                      <span class="light light--red active"></span>
+                      <span class="light light--yellow"></span>
+                      <span class="light light--green"></span>
+                    </div>
+                    <span class="signal__count" data-count="E">0</span>
+                  </div>
+                  <!-- South -->
+                  <div class="signal signal--south" data-lane="S" data-phase="P2">
+                    <span class="signal__label">South</span>
+                    <div class="signal__lights">
+                      <span class="light light--red active"></span>
+                      <span class="light light--yellow"></span>
+                      <span class="light light--green"></span>
+                    </div>
+                    <span class="signal__count" data-count="S">0</span>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card__header"><h2>Phase Details</h2></div>
+              <div class="card__body">
+                <dl class="detail-list" id="phase-details">
+                  <div class="detail-list__row">
+                    <dt>Active Phase</dt><dd id="detail-phase">—</dd>
+                  </div>
+                  <div class="detail-list__row">
+                    <dt>Green Duration</dt><dd id="detail-green">—</dd>
+                  </div>
+                  <div class="detail-list__row">
+                    <dt>Yellow Duration</dt><dd id="detail-yellow">4s</dd>
+                  </div>
+                  <div class="detail-list__row">
+                    <dt>Active Lanes</dt><dd id="detail-lanes">—</dd>
+                  </div>
+                  <div class="detail-list__row">
+                    <dt>Phase Load</dt><dd id="detail-load">—</dd>
+                  </div>
+                </dl>
+                <div class="phase-loads" id="phase-loads"></div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Detection -->
+        <section class="view" id="view-detection" aria-labelledby="detection-heading" hidden>
+          <div class="page-header">
+            <div>
+              <h1 id="detection-heading">Vehicle Detection</h1>
+              <p class="page-header__desc">Upload 4 lane snapshots — North, South, East, West</p>
+            </div>
+          </div>
+
+          <form class="card" id="upload-form" novalidate>
+            <div class="card__header">
+              <h2>Lane Images</h2>
+              <span class="text-muted">YOLOv5 powered</span>
+            </div>
+            <div class="card__body">
+              <div class="upload-grid">
+                <label class="upload-zone" data-lane="north">
+                  <input type="file" name="north" accept="image/*" hidden>
+                  <i class="fa-solid fa-arrow-up"></i>
+                  <span class="upload-zone__title">North</span>
+                  <span class="upload-zone__hint">Click or drop image</span>
+                  <img class="upload-zone__preview" alt="" hidden>
+                </label>
+                <label class="upload-zone" data-lane="south">
+                  <input type="file" name="south" accept="image/*" hidden>
+                  <i class="fa-solid fa-arrow-down"></i>
+                  <span class="upload-zone__title">South</span>
+                  <span class="upload-zone__hint">Click or drop image</span>
+                  <img class="upload-zone__preview" alt="" hidden>
+                </label>
+                <label class="upload-zone" data-lane="east">
+                  <input type="file" name="east" accept="image/*" hidden>
+                  <i class="fa-solid fa-arrow-right"></i>
+                  <span class="upload-zone__title">East</span>
+                  <span class="upload-zone__hint">Click or drop image</span>
+                  <img class="upload-zone__preview" alt="" hidden>
+                </label>
+                <label class="upload-zone" data-lane="west">
+                  <input type="file" name="west" accept="image/*" hidden>
+                  <i class="fa-solid fa-arrow-left"></i>
+                  <span class="upload-zone__title">West</span>
+                  <span class="upload-zone__hint">Click or drop image</span>
+                  <img class="upload-zone__preview" alt="" hidden>
+                </label>
+              </div>
+              <p class="form-error" id="upload-error" role="alert" hidden></p>
+            </div>
+            <div class="card__footer">
+              <button type="button" class="btn btn--ghost" id="clear-uploads">Clear All</button>
+              <button type="submit" class="btn btn--primary" id="analyze-btn">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                Analyze Junction
+              </button>
+            </div>
+          </form>
+
+          <article class="card" id="detection-results" hidden>
+            <div class="card__header"><h2>Detection Results</h2></div>
+            <div class="card__body">
+              <div class="table-wrap">
+                <table class="table" id="detection-table">
+                  <thead>
+                    <tr>
+                      <th>Lane</th>
+                      <th>Vehicles</th>
+                      <th>Breakdown</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <!-- History -->
+        <section class="view" id="view-history" aria-labelledby="history-heading" hidden>
+          <div class="page-header">
+            <div>
+              <h1 id="history-heading">Cycle History</h1>
+              <p class="page-header__desc">Past signal decisions and timings</p>
+            </div>
+          </div>
+
+          <article class="card">
+            <div class="card__header card__header--toolbar">
+              <div class="toolbar">
+                <div class="toolbar__search">
+                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                  <input
+                    type="search"
+                    id="history-search"
+                    placeholder="Search by phase, lane, or date…"
+                    aria-label="Search cycle history"
+                  >
+                  <button type="button" class="toolbar__search-clear" id="search-clear" hidden aria-label="Clear search">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+                <div class="toolbar__filters">
+                  <select id="filter-phase" aria-label="Filter by phase">
+                    <option value="">All Phases</option>
+                    <option value="P1">P1 — North</option>
+                    <option value="P2">P2 — South</option>
+                    <option value="P3">P3 — East</option>
+                    <option value="P4">P4 — West</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="card__body">
+              <div class="table-wrap">
+                <table class="table" id="history-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Phase</th>
+                      <th>Green</th>
+                      <th>N</th>
+                      <th>S</th>
+                      <th>E</th>
+                      <th>W</th>
+                    </tr>
+                  </thead>
+                  <tbody id="history-body">
+                    <tr class="empty-row">
+                      <td colspan="7">
+                        <div class="empty-state empty-state--sm">
+                          <i class="fa-solid fa-inbox"></i>
+                          <p>No history yet. Run your first analysis.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="pagination" id="pagination" hidden>
+                <button class="btn btn--ghost btn--sm" id="prev-page" disabled>Previous</button>
+                <span id="page-info">Page 1 of 1</span>
+                <button class="btn btn--ghost btn--sm" id="next-page" disabled>Next</button>
+              </div>
+              <p class="search-meta" id="search-meta" hidden></p>
+            </div>
+          </article>
+        </section>
+
+        <!-- Architecture -->
+        <section class="view" id="view-architecture" aria-labelledby="architecture-heading" hidden>
+          <div class="page-header">
+            <div>
+              <h1 id="architecture-heading">System Architecture</h1>
+              <p class="page-header__desc">How SignalFlow detects vehicles and controls junction signals</p>
+            </div>
+          </div>
+
+          <article class="card arch-intro">
+            <div class="card__body">
+              <p>
+                SignalFlow is an <strong>adaptive traffic signal controller</strong>. It uses
+                <strong>YOLOv5</strong> to count vehicles from lane snapshots, then applies
+                rule-based logic to pick the green phase and calculate signal timing — with
+                anti-starvation so one direction never gets stuck on red forever.
+              </p>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card__header"><h2>Architecture Diagram</h2></div>
+            <div class="card__body">
+              <div class="mermaid-wrap">
+                <div id="arch-mermaid" class="arch-mermaid-canvas" aria-label="System architecture flowchart"></div>
+              </div>
+            </div>
+          </article>
+
+          <div class="grid-2">
+            <article class="card">
+              <div class="card__header"><h2>How It Works</h2></div>
+              <div class="card__body">
+                <ol class="workflow-list">
+                  <li>
+                    <span class="workflow-list__num">1</span>
+                    <div>
+                      <strong>Upload 4 lane images</strong>
+                      <p>North, South, East, West snapshots from the junction camera feed.</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="workflow-list__num">2</span>
+                    <div>
+                      <strong>YOLO vehicle detection</strong>
+                      <p>Each image is scanned for cars, buses, trucks, and motorbikes.</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="workflow-list__num">3</span>
+                    <div>
+                      <strong>Count vehicles per lane</strong>
+                      <p>Builds a traffic load map: N, S, E, W vehicle counts.</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="workflow-list__num">4</span>
+                    <div>
+                      <strong>Phase selection</strong>
+                      <p>Picks P1–P4 based on highest load, with anti-starvation rotation.</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="workflow-list__num">5</span>
+                    <div>
+                      <strong>Adaptive green timing</strong>
+                      <p>Trucks/buses get longer green; result clamped between min and max.</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="workflow-list__num">6</span>
+                    <div>
+                      <strong>Signal visualization</strong>
+                      <p>Dashboard shows red / yellow / green and auto-cycles through phases.</p>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card__header"><h2>Phase Mapping</h2></div>
+              <div class="card__body">
+                <div class="phase-map">
+                  <div class="phase-map__item"><span class="phase-map__id">P1</span><span>North ↑</span></div>
+                  <div class="phase-map__item"><span class="phase-map__id">P2</span><span>South ↓</span></div>
+                  <div class="phase-map__item"><span class="phase-map__id">P3</span><span>East →</span></div>
+                  <div class="phase-map__item"><span class="phase-map__id">P4</span><span>West ←</span></div>
+                </div>
+                <h3 class="arch-subtitle">Tech Stack</h3>
+                <dl class="tech-stack">
+                  <div><dt>Frontend</dt><dd>HTML5, CSS3, Vanilla JS</dd></div>
+                  <div><dt>Backend</dt><dd>Python, Flask</dd></div>
+                  <div><dt>AI Model</dt><dd>YOLOv5 (Ultralytics)</dd></div>
+                  <div><dt>Logic</dt><dd>Rule-based + anti-starvation</dd></div>
+                </dl>
+                <h3 class="arch-subtitle">API Endpoints</h3>
+                <dl class="tech-stack">
+                  <div><dt>POST</dt><dd>/api/analyze — upload &amp; detect</dd></div>
+                  <div><dt>POST</dt><dd>/api/next-cycle — next phase</dd></div>
+                  <div><dt>POST</dt><dd>/api/reset — clear session</dd></div>
+                  <div><dt>GET</dt><dd>/api/health — status check</dd></div>
+                </dl>
+              </div>
+            </article>
+          </div>
+
+          <article class="card arch-credit">
+            <div class="card__body arch-credit__body">
+              <div>
+                <p class="arch-credit__label">Project by</p>
+                <p class="arch-credit__name">Prakriti Negi</p>
+                <p class="arch-credit__desc">Smart Traffic Signal Controller — Final Year Project</p>
+              </div>
+              <div class="arch-credit__actions">
+                <a
+                  href="https://github.com/PrakritiNegii/Smart_Traffic_Signal_Controller"
+                  class="btn btn--secondary"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <i class="fa-brands fa-github"></i>
+                  View on GitHub
+                </a>
+                <a
+                  href="https://www.linkedin.com/in/prakriti-negi-39164b28a/"
+                  class="btn btn--primary"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <i class="fa-brands fa-linkedin"></i>
+                  Connect on LinkedIn
+                </a>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <!-- Settings -->
+        <section class="view" id="view-settings" aria-labelledby="settings-heading" hidden>
+          <div class="page-header">
+            <div>
+              <h1 id="settings-heading">Settings</h1>
+              <p class="page-header__desc">Configure signal timing and detection parameters</p>
+            </div>
+          </div>
+
+          <form class="card" id="settings-form">
+            <div class="card__header"><h2>Signal Timing</h2></div>
+            <div class="card__body form-grid">
+              <div class="form-group">
+                <label for="min-green">Minimum Green (seconds)</label>
+                <input type="number" id="min-green" name="min_green" min="5" max="120" value="15">
+              </div>
+              <div class="form-group">
+                <label for="max-green">Maximum Green (seconds)</label>
+                <input type="number" id="max-green" name="max_green" min="10" max="180" value="60">
+              </div>
+              <div class="form-group">
+                <label for="threshold">Detection Threshold</label>
+                <input type="number" id="threshold" name="threshold" min="0.1" max="0.9" step="0.05" value="0.4">
+                <span class="form-hint">YOLO confidence cutoff (0.1 – 0.9)</span>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button type="submit" class="btn btn--primary">Save Settings</button>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Confirm modal -->
+  <dialog class="modal" id="confirm-modal" aria-labelledby="confirm-title">
+    <div class="modal__content">
+      <h2 id="confirm-title">Confirm Action</h2>
+      <p id="confirm-message"></p>
+      <div class="modal__actions">
+        <button class="btn btn--ghost" id="confirm-cancel">Cancel</button>
+        <button class="btn btn--danger" id="confirm-ok">Confirm</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loading-overlay" hidden aria-live="polite">
+    <div class="loading-spinner">
+      <div class="spinner"></div>
+      <p id="loading-text">Analyzing junction images…</p>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <!-- Mobile bottom navigation -->
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
+    <button class="mobile-nav__item active" data-view="dashboard" aria-current="page">
+      <i class="fa-solid fa-gauge-high"></i>
+      <span>Home</span>
+    </button>
+    <button class="mobile-nav__item" data-view="junction">
+      <i class="fa-solid fa-road"></i>
+      <span>Junction</span>
+    </button>
+    <button class="mobile-nav__item" data-view="detection">
+      <i class="fa-solid fa-camera"></i>
+      <span>Detect</span>
+    </button>
+    <button class="mobile-nav__item" data-view="history">
+      <i class="fa-solid fa-clock-rotate-left"></i>
+      <span>History</span>
+    </button>
+    <button class="mobile-nav__item" data-view="settings">
+      <i class="fa-solid fa-sliders"></i>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="js/app.js" type="module"></script>
+</body>
+</html>
