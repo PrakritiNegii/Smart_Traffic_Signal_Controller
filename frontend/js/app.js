@@ -302,11 +302,29 @@ function switchView(viewId) {
 
 // ── API ───────────────────────────────────────────────────────────────────
 
+// Parse a fetch Response as JSON, but degrade gracefully when the server
+// returns an HTML error page (e.g. Render out-of-memory / timeout / 502).
+async function readJson(res, fallback) {
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text);
+    if (!res.ok) throw new Error(data.error || fallback);
+    return data;
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      // Response was not JSON — usually a server crash or gateway page.
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        throw new Error("Server is busy or ran out of memory (free hosting limit). Try again in a moment.");
+      }
+      throw new Error(`Server error (${res.status}). The backend may have crashed running detection.`);
+    }
+    throw err;
+  }
+}
+
 async function apiAnalyze(formData) {
   const res = await fetch("/api/analyze", { method: "POST", body: formData });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Analysis failed");
-  return data;
+  return readJson(res, "Analysis failed");
 }
 
 async function apiNextCycle() {
@@ -315,9 +333,7 @@ async function apiNextCycle() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ lane_counts: state.laneCounts, settings: state.settings }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Cycle failed");
-  return data;
+  return readJson(res, "Cycle failed");
 }
 
 async function apiReset() {
