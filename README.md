@@ -8,9 +8,11 @@ An intelligent traffic management system that analyzes lane-wise vehicle density
 
 ## Live Demo
 
-> **Add your Render URL here after deployment.**
+**[https://smart-traffic-signal-m7v5.onrender.com](https://smart-traffic-signal-m7v5.onrender.com)**
 
-<!-- Example: https://smart-traffic-signal.onrender.com -->
+Open the dashboard → **Detection** → upload 4 lane images → **Analyze Junction**.
+
+> Free tier may sleep after inactivity; first load can take 30–60 seconds.
 
 ---
 
